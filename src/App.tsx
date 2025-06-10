@@ -18,8 +18,11 @@ import {
   Sun,
   Leaf,
   ThermometerSun,
-  Fan
+  Fan,
+  Calendar
 } from 'lucide-react';
+import CalendarIntegration from './components/CalendarIntegration';
+import ScheduleManager from './components/ScheduleManager';
 
 interface SensorData {
   temperature: number;
@@ -38,7 +41,18 @@ interface SensorData {
   autoMode: boolean;
 }
 
-type OperatingMode = 'manual' | 'automatic';
+interface CalendarEvent {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  description?: string;
+  type: 'irrigation' | 'maintenance' | 'fertilizer';
+  valves: string[];
+  duration: number;
+}
+
+type OperatingMode = 'manual' | 'automatic' | 'scheduled';
 
 const ModeSwitch: React.FC<{ 
   mode: OperatingMode; 
@@ -50,25 +64,36 @@ const ModeSwitch: React.FC<{
         <div className="bg-white/20 rounded-full p-1 flex">
           <button
             onClick={() => onModeChange('manual')}
-            className={`flex items-center gap-2 px-6 py-3 rounded-full font-semibold transition-all duration-300 ${
+            className={`flex items-center gap-2 px-4 py-3 rounded-full font-semibold transition-all duration-300 ${
               mode === 'manual'
                 ? 'bg-white text-blue-900 shadow-lg'
                 : 'text-white hover:bg-white/10'
             }`}
           >
             <Settings className="w-5 h-5" />
-            Ручни Режим
+            Ručni
           </button>
           <button
             onClick={() => onModeChange('automatic')}
-            className={`flex items-center gap-2 px-6 py-3 rounded-full font-semibold transition-all duration-300 ${
+            className={`flex items-center gap-2 px-4 py-3 rounded-full font-semibold transition-all duration-300 ${
               mode === 'automatic'
                 ? 'bg-white text-blue-900 shadow-lg'
                 : 'text-white hover:bg-white/10'
             }`}
           >
             <Target className="w-5 h-5" />
-            Аутоматски Режим
+            Automatski
+          </button>
+          <button
+            onClick={() => onModeChange('scheduled')}
+            className={`flex items-center gap-2 px-4 py-3 rounded-full font-semibold transition-all duration-300 ${
+              mode === 'scheduled'
+                ? 'bg-white text-blue-900 shadow-lg'
+                : 'text-white hover:bg-white/10'
+            }`}
+          >
+            <Calendar className="w-5 h-5" />
+            Zakazano
           </button>
         </div>
       </div>
@@ -325,7 +350,7 @@ const AutomaticControls: React.FC<{
                 <div>• Температурна регулација: {data.targetTemperature}°C ± 1°C</div>
                 <div>• Вентилатор: {data.fanSpeed}% брзине</div>
                 <div>• Влажност земљишта: Аутоматско наводњавање</div>
-                <div>• Ветар: Заштита при јачини &gt; 15 km/h</div>
+                <div>• Ветар: Заштита при јачини > 15 km/h</div>
                 <div>• CO₂: Оптимизација за раст биљака</div>
               </div>
             </div>
@@ -392,7 +417,7 @@ const ManualControls: React.FC<{
           </div>
           <div className="flex items-start gap-2">
             <div className="w-2 h-2 bg-red-400 rounded-full mt-1.5 flex-shrink-0"></div>
-            <span>Висока брзина ветра (&gt;{data.windSpeed.toFixed(1)} km/h) може утицати на систем</span>
+            <span>Висока брзина ветра (>{data.windSpeed.toFixed(1)} km/h) може утицати на систем</span>
           </div>
         </div>
       </div>
@@ -462,6 +487,7 @@ const SystemStatus: React.FC<{ data: SensorData }> = ({ data }) => {
 
 function App() {
   const [operatingMode, setOperatingMode] = useState<OperatingMode>('manual');
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [sensorData, setSensorData] = useState<SensorData>({
     temperature: 22.5,
     pressure: 1.2,
@@ -576,6 +602,25 @@ function App() {
     }));
   };
 
+  const handleScheduleUpdate = (events: CalendarEvent[]) => {
+    setCalendarEvents(events);
+  };
+
+  const handleExecuteEvent = (event: any) => {
+    console.log('Executing scheduled event:', event);
+    
+    // Execute the scheduled event
+    if (event.type === 'irrigation') {
+      setSensorData(prev => ({
+        ...prev,
+        valves: {
+          valve1: event.valves.includes('valve1'),
+          valve2: event.valves.includes('valve2')
+        }
+      }));
+    }
+  };
+
   const getSensorStatus = (type: string, value: number) => {
     switch (type) {
       case 'wind':
@@ -594,6 +639,36 @@ function App() {
         return 'good';
       default:
         return 'good';
+    }
+  };
+
+  const renderModeContent = () => {
+    switch (operatingMode) {
+      case 'automatic':
+        return (
+          <AutomaticControls 
+            data={sensorData} 
+            onTargetChange={handleTargetTemperatureChange}
+            onFanSpeedChange={handleFanSpeedChange}
+          />
+        );
+      case 'scheduled':
+        return (
+          <div className="space-y-6">
+            <CalendarIntegration onScheduleUpdate={handleScheduleUpdate} />
+            <ScheduleManager 
+              events={calendarEvents} 
+              onExecuteEvent={handleExecuteEvent}
+            />
+          </div>
+        );
+      default:
+        return (
+          <ManualControls 
+            data={sensorData} 
+            onValveToggle={toggleValve}
+          />
+        );
     }
   };
 
@@ -668,18 +743,7 @@ function App() {
         {/* Mode-specific Controls */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-6">
           <div className="lg:col-span-3">
-            {operatingMode === 'automatic' ? (
-              <AutomaticControls 
-                data={sensorData} 
-                onTargetChange={handleTargetTemperatureChange}
-                onFanSpeedChange={handleFanSpeedChange}
-              />
-            ) : (
-              <ManualControls 
-                data={sensorData} 
-                onValveToggle={toggleValve}
-              />
-            )}
+            {renderModeContent()}
           </div>
           
           <div className="lg:col-span-1">
@@ -689,7 +753,7 @@ function App() {
 
         {/* Footer */}
         <div className="text-center text-white/50 text-sm">
-          <p>ESP32 Систем за Наводњавање в3.1 | WebSocket: Порт 81 | MQTT: localhost:1883</p>
+          <p>ESP32 Систем за Наводњавање в3.2 | WebSocket: Порт 81 | MQTT: localhost:1883 | Google Calendar API</p>
         </div>
       </div>
 
